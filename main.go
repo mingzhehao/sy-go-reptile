@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/bitly/go-simplejson"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,7 +27,7 @@ func main() {
 			url := getUrl(city[i])
 			post := getPostData(language[j], j)
 			fmt.Println(post)
-			httpPost(url, language[j], j)
+			httpPost(url, language[j], 1)
 		}
 
 	}
@@ -45,7 +46,7 @@ func getPostData(word string, pageNumber int) string {
 }
 
 func httpPost(url string, word string, pageNumber int) {
-	pn := strconv.Itoa(pageNumber + 1)
+	pn := strconv.Itoa(pageNumber)
 	postData := "first=false&kd=" + word + "&pn=" + pn
 	resp, err := http.Post(url,
 		"application/x-www-form-urlencoded",
@@ -74,21 +75,32 @@ func httpPost(url string, word string, pageNumber int) {
 		 * interface.(string)
 		 */
 		contents, _ := js.Get("content").Get("positionResult").Get("result").Array()
-		for _, info := range contents {
-			newInfo, _ := info.(map[string]interface{})
-			positionType := newInfo["positionType"].(string)
-			positionName := newInfo["positionName"].(string)
-			workYear := newInfo["workYear"].(string)
-			salary := newInfo["salary"].(string)
-			language := word
-			city := newInfo["city"].(string)
-			fmt.Println(positionType, positionName, workYear, salary, city)
-			err := InsertLagouUser(positionType, positionName, workYear, salary, city, language)
-			if err != nil {
-				fmt.Println("数据插入失败！", err)
-			} else {
-				fmt.Println("数据插入成功！")
+		totalCount, _ := js.Get("content").Get("positionResult").Get("totalCount").Float64()
+		pageSize, _ := js.Get("content").Get("positionResult").Get("pageSize").Float64()
+		pageCount := totalCount / pageSize
+		pageCountFloat := math.Ceil(pageCount)
+		pageCountInt := int(pageCountFloat)
+		if pageNumber < pageCountInt {
+			for _, info := range contents {
+				newInfo, _ := info.(map[string]interface{})
+				positionType := newInfo["positionType"].(string)
+				positionName := newInfo["positionName"].(string)
+				workYear := newInfo["workYear"].(string)
+				salary := newInfo["salary"].(string)
+				language := word
+				city := newInfo["city"].(string)
+				fmt.Println(positionType, positionName, workYear, salary, city)
+				err := InsertLagouUser(positionType, positionName, workYear, salary, city, language)
+				if err != nil {
+					fmt.Println("数据插入失败！", err)
+				} else {
+					fmt.Println("数据插入成功！")
+				}
 			}
+			httpPost(url, word, pageNumber+1)
+		} else {
+			fmt.Println(word, " 遍历了", pageNumber, "页,已完毕!")
 		}
+
 	}
 }
